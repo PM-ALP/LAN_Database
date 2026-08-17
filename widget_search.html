@@ -1,242 +1,122 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>Measure Search</title>
-
+  <meta charset="utf-8" />
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font-family: Arial, sans-serif;
+  }
+
+  body {
+    padding: 8px;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+    color: inherit;
+    background: transparent;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 6px 8px;
+    outline: none;
+  }
+
+  label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0;
+    font-family: Arial, sans-serif;
+    color: inherit;
+  }
+
+  #results {
+    margin-top: 8px;
+    font-family: Arial, sans-serif;
+    color: inherit;
+  }
+
+  .row {
+    padding: 4px 0;
+    font-family: Arial, sans-serif;
+    color: inherit;
+  }
+</style>
 </head>
-
 <body>
+  <input id="search" type="text" placeholder="Search measure..." />
+  <label>
+    <input id="searchAll" type="checkbox" />
+    Search in full information
+  </label>
+  <div id="results"></div>
+  
+  <script>
+    const TABLE_ID = "Overview";
+    const MAIN_COLUMN_ID = "Measures";
 
-  <div>
-    <input
-      id="search"
-      type="search"
-      placeholder="Search measures..."
-      autocomplete="off"
-    >
+    let allRows = [];
 
-    <label style="margin-left: 10px;">
-      <input
-        id="searchContent"
-        type="checkbox"
-      >
-      Search also in measure content
-    </label>
-  </div>
-
-
-<script>
-
-  /*
-   * This widget acts as a FILTER SOURCE.
-   *
-   * It does not display search results.
-   * It sends the IDs of matching rows to linked widgets.
-   */
-
-  grist.ready({
-    requiredAccess: "read table",
-    allowSelectBy: true
-  });
-
-
-  let records = [];
-
-
-  /*
-   * Convert any Grist value to searchable text.
-   */
-  function normalize(value) {
-
-    if (value === null || value === undefined) {
-      return "";
+    function normalize(value) {
+      return String(value ?? "").toLowerCase();
     }
 
-    if (Array.isArray(value)) {
-      return value.join(" ");
-    }
+    function rowMatches(row, query, searchAll) {
+      if (!query) return true;
 
-    if (typeof value === "object") {
-      try {
-        return JSON.stringify(value);
-      } catch (e) {
-        return String(value);
-      }
-    }
+      const mainValue = normalize(row[MAIN_COLUMN_ID]);
+      if (mainValue.includes(query)) return true;
 
-    return String(value);
-  }
-
-
-  /*
-   * Case-insensitive and accent-insensitive search.
-   *
-   * Example:
-   * "écologie" -> "ecologie"
-   */
-  function normalizeForSearch(value) {
-
-    return normalize(value)
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-  }
-
-
-  /*
-   * Search the records and send matching row IDs
-   * to linked widgets.
-   */
-  async function applySearch() {
-
-    const input =
-      document.getElementById("search");
-
-    const searchContent =
-      document.getElementById("searchContent").checked;
-
-    const query =
-      normalizeForSearch(input.value).trim();
-
-
-    /*
-     * Empty search:
-     * show all rows again.
-     */
-    if (!query) {
-
-      await grist.setSelectedRows(null);
-
-      return;
-    }
-
-
-    /*
-     * Split the query into words.
-     *
-     * Example:
-     *
-     * "parking alpine"
-     *
-     * requires both words to be present.
-     */
-    const terms =
-      query
-        .split(/\s+/)
-        .filter(Boolean);
-
-
-    const matchingRows = records.filter(record => {
-
-      let searchableText;
-
-
-      /*
-       * Normal mode:
-       * search ONLY in $Measure.
-       */
-      if (!searchContent) {
-
-        searchableText =
-          normalizeForSearch(record.Measure);
-
+      if (searchAll) {
+        return Object.entries(row).some(([key, value]) => {
+          if (key === "id") return false;
+          return normalize(value).includes(query);
+        });
       }
 
+      return false;
+    }
 
-      /*
-       * Extended mode:
-       * search in ALL fields of the measure.
-       */
-      else {
+    function render(rows) {
+      const results = document.getElementById("results");
+      results.innerHTML = "";
 
-        searchableText =
-          Object.values(record)
-            .map(value => normalizeForSearch(value))
-            .join(" ");
-      }
+      rows.forEach(row => {
+        const div = document.createElement("div");
+        div.textContent = row[MAIN_COLUMN_ID] ?? "";
+        results.appendChild(div);
+      });
+    }
 
+    function applyFilter() {
+      const query = normalize(document.getElementById("search").value.trim());
+      const searchAll = document.getElementById("searchAll").checked;
+      const filtered = allRows.filter(row => rowMatches(row, query, searchAll));
+      render(filtered);
+    }
 
-      /*
-       * All search words must be present.
-       */
-      return terms.every(term =>
-        searchableText.includes(term)
-      );
+    async function loadData() {
+      const table = await grist.docApi.fetchTable(TABLE_ID);
+      allRows = table;
+      applyFilter();
+    }
 
+    document.getElementById("search").addEventListener("input", applyFilter);
+    document.getElementById("searchAll").addEventListener("change", applyFilter);
+
+    grist.ready({
+      access: "read table"
     });
 
-
-    /*
-     * Get Grist row IDs.
-     */
-    const rowIds =
-      matchingRows
-        .map(record => record.id)
-        .filter(id =>
-          typeof id === "number"
-        );
-
-
-    /*
-     * Tell Grist which rows should be selected
-     * in linked widgets.
-     */
-    await grist.setSelectedRows(rowIds);
-  }
-
-
-  /*
-   * Receive the complete table from Grist.
-   *
-   * Important:
-   * use rows format explicitly.
-   */
-  grist.onRecords(
-    function(data) {
-
-      records = Array.isArray(data)
-        ? data
-        : [];
-
-      /*
-       * Re-apply the current search when the
-       * underlying data changes.
-       */
-      applySearch();
-    },
-    {
-      format: "rows"
-    }
-  );
-
-
-  /*
-   * Search while typing.
-   */
-  document
-    .getElementById("search")
-    .addEventListener(
-      "input",
-      applySearch
-    );
-
-
-  /*
-   * Re-run the search when the checkbox changes.
-   */
-  document
-    .getElementById("searchContent")
-    .addEventListener(
-      "change",
-      applySearch
-    );
-
-
-</script>
-
-</body>
+    grist.onRecords(loadData);
+    loadData();
+  </script>
+  </body>
 </html>
