@@ -1,122 +1,524 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Measure Search</title>
-<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Measure Search</title>
+
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 </head>
+
 <body>
 
-<input id="search" type="text" placeholder="Search measures…">
-<input type="checkbox" id="deepSearch">
-<label for="deepSearch">Search also in measure content</label>
+  <div>
+    <div>
+      <input
+        id="search"
+        type="search"
+        placeholder="Search measures…"
+        autocomplete="off"
+      >
 
-<div id="count"></div>
-<div id="list"></div>
+      <button id="clear" type="button">
+        Clear
+      </button>
+    </div>
+
+    <div>
+      <label>
+        <input
+          id="searchContent"
+          type="checkbox"
+        >
+        Search also in measure content
+      </label>
+    </div>
+
+    <div id="status">
+      Loading measures…
+    </div>
+
+    <div id="results"></div>
+  </div>
+
 
 <script>
-// =========================================================================
-// 1) CONNECT TO GRIST
-// =========================================================================
-// allowSelectBy: true -> this widget can be chosen as "Select By" source
-// for other widgets on the page (e.g. your existing detail Card).
-grist.ready({
-  requiredAccess: 'read table',
-  allowSelectBy: true
-});
 
-const TABLE_NAME = 'VISITOR MANAGEMENT MEASURES'; // <-- change here if your table has another name
-
-let allRecords = [];
-let selectedId = null;
-
-// -------------------------------------------------------------------------
-// 2) DECODE HELPER (Choice List cells come as ["L", "val1", "val2", ...])
-// -------------------------------------------------------------------------
-function decodeList(value) {
-  if (Array.isArray(value) && value[0] === 'L') return value.slice(1);
-  if (Array.isArray(value)) return value;
-  return [];
-}
-
-// -------------------------------------------------------------------------
-// 3) LOAD DATA
-// -------------------------------------------------------------------------
-async function loadData() {
-  const table = await grist.docApi.fetchTable(TABLE_NAME);
-  const n = table.id.length;
-  const rows = [];
-  for (let i = 0; i < n; i++) {
-    rows.push({
-      id: table.id[i],
-      name: table.Measure ? (table.Measure[i] || '') : '',
-      description: table.Short_description ? table.Short_description[i] : '',
-      issues: table.Potential_limits ? table.Potential_limits[i] : '',
-      climate: table.Climate_change ? table.Climate_change[i] : '',
-      examples: table.Examples ? table.Examples[i] : '',
-      approach: decodeList(table.Approach ? table.Approach[i] : []),
-      effect: decodeList(table.Effect ? table.Effect[i] : []),
-      activity: decodeList(table.Activity ? table.Activity[i] : []),
-    });
-  }
-  allRecords = rows.filter(r => r.name);
-  render();
-}
-
-// -------------------------------------------------------------------------
-// 4) FULL-TEXT BLOB PER RECORD (used only when the checkbox is checked)
-// -------------------------------------------------------------------------
-function fullText(r) {
-  return [
-    r.name, r.description, r.issues, r.climate, r.examples,
-    ...r.approach, ...r.effect, ...r.activity,
-  ].join(' ').toLowerCase();
-}
-
-// -------------------------------------------------------------------------
-// 5) FILTER LOGIC
-// -------------------------------------------------------------------------
-function getFilteredRecords() {
-  const q = document.getElementById('search').value.trim().toLowerCase();
-  const deep = document.getElementById('deepSearch').checked;
-  if (!q) return allRecords;
-  return allRecords.filter(r =>
-    r.name.toLowerCase().includes(q) || (deep && fullText(r).includes(q))
-  );
-}
-
-// -------------------------------------------------------------------------
-// 6) RENDER THE LIST (plain, unstyled)
-// -------------------------------------------------------------------------
-function render() {
-  const results = getFilteredRecords();
-  document.getElementById('count').textContent =
-    results.length + ' of ' + allRecords.length + ' measures';
-
-  const list = document.getElementById('list');
-  list.innerHTML = '';
-  results.forEach(r => {
-    const item = document.createElement('div');
-    item.textContent = r.name + (r.id === selectedId ? '  ✓' : '');
-    item.style.cursor = 'pointer';
-    item.addEventListener('click', () => {
-      selectedId = r.id;
-      // Move Grist's cursor to this row -> updates any linked widget
-      grist.setCursorPos({ rowId: r.id });
-      render();
-    });
-    list.appendChild(item);
+  grist.ready({
+    requiredAccess: "read table",
+    allowSelectBy: true
   });
-}
 
-// -------------------------------------------------------------------------
-// 7) WIRE UP + LOAD
-// -------------------------------------------------------------------------
-document.getElementById('search').addEventListener('input', render);
-document.getElementById('deepSearch').addEventListener('change', render);
 
-loadData();
-grist.onRecords(() => loadData());
+  let records = [];
+
+
+  /*
+   * Convert any value into searchable text.
+   */
+  function normalize(value) {
+
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    if (Array.isArray(value)) {
+      return value.join(" ");
+    }
+
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value);
+      } catch (e) {
+        return String(value);
+      }
+    }
+
+    return String(value);
+  }
+
+
+  /*
+   * Case-insensitive and accent-insensitive search.
+   *
+   * Example:
+   * "écologie" -> "ecologie"
+   */
+  function normalizeForSearch(value) {
+
+    return normalize(value)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+
+  /*
+   * Name of the measure.
+   */
+  function getMeasureName(record) {
+
+    return normalize(record.Measure) || "(Unnamed measure)";
+  }
+
+
+  /*
+   * Description displayed below the measure name.
+   */
+  function getDescription(record) {
+
+    const fields = [
+      "Short_description",
+      "Short description",
+      "Description",
+      "Potential_limits",
+      "Potential limits"
+    ];
+
+    for (const field of fields) {
+
+      if (
+        record[field] !== undefined &&
+        normalize(record[field]).trim() !== ""
+      ) {
+        return normalize(record[field]);
+      }
+    }
+
+    return "";
+  }
+
+
+  /*
+   * Text used for searching.
+   *
+   * Normal search:
+   * only Measure.
+   *
+   * Extended search:
+   * all fields.
+   */
+  function getSearchText(record, searchContent) {
+
+    if (!searchContent) {
+      return normalizeForSearch(record.Measure);
+    }
+
+    return Object.values(record)
+      .map(value => normalizeForSearch(value))
+      .join(" ");
+  }
+
+
+  /*
+   * Search.
+   */
+  function performSearch() {
+
+    const input = document.getElementById("search");
+    const searchContent =
+      document.getElementById("searchContent");
+
+    const query = normalizeForSearch(input.value);
+    const extended = searchContent.checked;
+
+    const resultsContainer =
+      document.getElementById("results");
+
+    const status =
+      document.getElementById("status");
+
+    resultsContainer.innerHTML = "";
+
+
+    /*
+     * No search:
+     * show the first 100 measures.
+     */
+    if (!query) {
+
+      const visible = records.slice(0, 100);
+
+      status.textContent =
+        records.length +
+        " measures available" +
+        (records.length > 100
+          ? " — showing first 100"
+          : "");
+
+      renderResults(visible);
+
+      return;
+    }
+
+
+    /*
+     * Multiple words are treated as AND.
+     *
+     * Example:
+     * "parking alpine"
+     *
+     * Both words must occur.
+     */
+    const terms = query
+      .split(/\s+/)
+      .filter(Boolean);
+
+
+    const matches = records.filter(record => {
+
+      const text =
+        getSearchText(record, extended);
+
+      return terms.every(term =>
+        text.includes(term)
+      );
+    });
+
+
+    status.textContent =
+      matches.length +
+      " result" +
+      (matches.length !== 1 ? "s" : "") +
+      " found";
+
+
+    renderResults(matches);
+  }
+
+
+  /*
+   * Display search results.
+   */
+  function renderResults(matches) {
+
+    const resultsContainer =
+      document.getElementById("results");
+
+    resultsContainer.innerHTML = "";
+
+
+    if (!matches.length) {
+
+      const empty =
+        document.createElement("div");
+
+      empty.textContent =
+        "No measures found.";
+
+      resultsContainer.appendChild(empty);
+
+      return;
+    }
+
+
+    const visibleResults =
+      matches.slice(0, 100);
+
+
+    visibleResults.forEach(record => {
+
+      const result =
+        document.createElement("div");
+
+
+      const title =
+        document.createElement("div");
+
+      title.textContent =
+        getMeasureName(record);
+
+
+      result.appendChild(title);
+
+
+      const descriptionText =
+        getDescription(record);
+
+
+      if (descriptionText) {
+
+        const description =
+          document.createElement("div");
+
+        description.textContent =
+          descriptionText;
+
+        result.appendChild(description);
+      }
+
+
+      /*
+       * Clicking a result selects the corresponding
+       * row in Grist.
+       */
+      result.addEventListener("click", async () => {
+
+        try {
+
+          if (record.id !== undefined) {
+
+            await grist.setCursorPos({
+              rowId: record.id
+            });
+
+          }
+
+        } catch (error) {
+
+          console.error(
+            "Unable to select Grist row:",
+            error
+          );
+        }
+      });
+
+
+      /*
+       * Make the result look clickable without
+       * imposing a visual theme.
+       */
+      result.style.cursor = "pointer";
+
+
+      resultsContainer.appendChild(result);
+
+    });
+
+
+    if (matches.length > 100) {
+
+      const more =
+        document.createElement("div");
+
+      more.textContent =
+        "Showing first 100 results.";
+
+      resultsContainer.appendChild(more);
+    }
+  }
+
+
+  /*
+   * Load the table selected in Grist.
+   *
+   * IMPORTANT:
+   * We use fetchSelectedTable() instead of
+   * docApi.fetchTable().
+   */
+  async function loadData() {
+
+    const status =
+      document.getElementById("status");
+
+    try {
+
+      const data =
+        await grist.fetchSelectedTable();
+
+
+      if (Array.isArray(data)) {
+
+        records = data;
+
+      } else {
+
+        records =
+          convertColumnDataToRecords(data);
+      }
+
+
+      status.textContent =
+        records.length +
+        " measures available";
+
+
+      performSearch();
+
+    } catch (error) {
+
+      console.error(
+        "Error loading Grist data:",
+        error
+      );
+
+
+      status.textContent =
+        "Unable to load data from Grist.";
+
+
+      const results =
+        document.getElementById("results");
+
+      results.textContent =
+        "Please check the widget access level and selected table.";
+    }
+  }
+
+
+  /*
+   * Convert column-oriented data to records,
+   * if necessary.
+   */
+  function convertColumnDataToRecords(data) {
+
+    if (!data || typeof data !== "object") {
+      return [];
+    }
+
+
+    const columns =
+      Object.keys(data);
+
+
+    if (!columns.length) {
+      return [];
+    }
+
+
+    const firstColumn =
+      data[columns[0]];
+
+
+    if (!Array.isArray(firstColumn)) {
+      return [];
+    }
+
+
+    const rowCount =
+      firstColumn.length;
+
+
+    const output = [];
+
+
+    for (let i = 0; i < rowCount; i++) {
+
+      const record = {};
+
+
+      columns.forEach(column => {
+
+        const values =
+          data[column];
+
+        record[column] =
+          Array.isArray(values)
+            ? values[i]
+            : values;
+      });
+
+
+      output.push(record);
+    }
+
+
+    return output;
+  }
+
+
+  /*
+   * Search input.
+   */
+  document
+    .getElementById("search")
+    .addEventListener(
+      "input",
+      performSearch
+    );
+
+
+  /*
+   * Extended search checkbox.
+   */
+  document
+    .getElementById("searchContent")
+    .addEventListener(
+      "change",
+      performSearch
+    );
+
+
+  /*
+   * Clear button.
+   */
+  document
+    .getElementById("clear")
+    .addEventListener(
+      "click",
+      () => {
+
+        document.getElementById("search").value = "";
+
+        performSearch();
+
+        document.getElementById("search").focus();
+      }
+    );
+
+
+  /*
+   * React to changes in the Grist table.
+   */
+  grist.onRecords(function(data) {
+
+    records =
+      Array.isArray(data)
+        ? data
+        : convertColumnDataToRecords(data);
+
+    performSearch();
+  });
+
+
+  /*
+   * Initial load.
+   */
+  loadData();
+
 </script>
+
 </body>
 </html>
