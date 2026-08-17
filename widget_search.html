@@ -12,38 +12,31 @@
 <body>
 
   <div>
-    <div>
+    <input
+      id="search"
+      type="search"
+      placeholder="Search measures..."
+      autocomplete="off"
+    >
+
+    <label style="margin-left: 10px;">
       <input
-        id="search"
-        type="search"
-        placeholder="Search measures…"
-        autocomplete="off"
+        id="searchContent"
+        type="checkbox"
       >
-
-      <button id="clear" type="button">
-        Clear
-      </button>
-    </div>
-
-    <div>
-      <label>
-        <input
-          id="searchContent"
-          type="checkbox"
-        >
-        Search also in measure content
-      </label>
-    </div>
-
-    <div id="status">
-      Loading measures…
-    </div>
-
-    <div id="results"></div>
+      Search also in measure content
+    </label>
   </div>
 
 
 <script>
+
+  /*
+   * This widget acts as a FILTER SOURCE.
+   *
+   * It does not display search results.
+   * It sends the IDs of matching rows to linked widgets.
+   */
 
   grist.ready({
     requiredAccess: "read table",
@@ -55,7 +48,7 @@
 
 
   /*
-   * Convert any value into searchable text.
+   * Convert any Grist value to searchable text.
    */
   function normalize(value) {
 
@@ -90,433 +83,158 @@
     return normalize(value)
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
+      .toLowerCase();
   }
 
 
   /*
-   * Name of the measure.
+   * Search the records and send matching row IDs
+   * to linked widgets.
    */
-  function getMeasureName(record) {
+  async function applySearch() {
 
-    return normalize(record.Measure) || "(Unnamed measure)";
-  }
+    const input =
+      document.getElementById("search");
 
-
-  /*
-   * Description displayed below the measure name.
-   */
-  function getDescription(record) {
-
-    const fields = [
-      "Short_description",
-      "Short description",
-      "Description",
-      "Potential_limits",
-      "Potential limits"
-    ];
-
-    for (const field of fields) {
-
-      if (
-        record[field] !== undefined &&
-        normalize(record[field]).trim() !== ""
-      ) {
-        return normalize(record[field]);
-      }
-    }
-
-    return "";
-  }
-
-
-  /*
-   * Text used for searching.
-   *
-   * Normal search:
-   * only Measure.
-   *
-   * Extended search:
-   * all fields.
-   */
-  function getSearchText(record, searchContent) {
-
-    if (!searchContent) {
-      return normalizeForSearch(record.Measure);
-    }
-
-    return Object.values(record)
-      .map(value => normalizeForSearch(value))
-      .join(" ");
-  }
-
-
-  /*
-   * Search.
-   */
-  function performSearch() {
-
-    const input = document.getElementById("search");
     const searchContent =
-      document.getElementById("searchContent");
+      document.getElementById("searchContent").checked;
 
-    const query = normalizeForSearch(input.value);
-    const extended = searchContent.checked;
-
-    const resultsContainer =
-      document.getElementById("results");
-
-    const status =
-      document.getElementById("status");
-
-    resultsContainer.innerHTML = "";
+    const query =
+      normalizeForSearch(input.value).trim();
 
 
     /*
-     * No search:
-     * show the first 100 measures.
+     * Empty search:
+     * show all rows again.
      */
     if (!query) {
 
-      const visible = records.slice(0, 100);
-
-      status.textContent =
-        records.length +
-        " measures available" +
-        (records.length > 100
-          ? " — showing first 100"
-          : "");
-
-      renderResults(visible);
+      await grist.setSelectedRows(null);
 
       return;
     }
 
 
     /*
-     * Multiple words are treated as AND.
+     * Split the query into words.
      *
      * Example:
+     *
      * "parking alpine"
      *
-     * Both words must occur.
+     * requires both words to be present.
      */
-    const terms = query
-      .split(/\s+/)
-      .filter(Boolean);
+    const terms =
+      query
+        .split(/\s+/)
+        .filter(Boolean);
 
 
-    const matches = records.filter(record => {
+    const matchingRows = records.filter(record => {
 
-      const text =
-        getSearchText(record, extended);
+      let searchableText;
 
+
+      /*
+       * Normal mode:
+       * search ONLY in $Measure.
+       */
+      if (!searchContent) {
+
+        searchableText =
+          normalizeForSearch(record.Measure);
+
+      }
+
+
+      /*
+       * Extended mode:
+       * search in ALL fields of the measure.
+       */
+      else {
+
+        searchableText =
+          Object.values(record)
+            .map(value => normalizeForSearch(value))
+            .join(" ");
+      }
+
+
+      /*
+       * All search words must be present.
+       */
       return terms.every(term =>
-        text.includes(term)
+        searchableText.includes(term)
       );
-    });
-
-
-    status.textContent =
-      matches.length +
-      " result" +
-      (matches.length !== 1 ? "s" : "") +
-      " found";
-
-
-    renderResults(matches);
-  }
-
-
-  /*
-   * Display search results.
-   */
-  function renderResults(matches) {
-
-    const resultsContainer =
-      document.getElementById("results");
-
-    resultsContainer.innerHTML = "";
-
-
-    if (!matches.length) {
-
-      const empty =
-        document.createElement("div");
-
-      empty.textContent =
-        "No measures found.";
-
-      resultsContainer.appendChild(empty);
-
-      return;
-    }
-
-
-    const visibleResults =
-      matches.slice(0, 100);
-
-
-    visibleResults.forEach(record => {
-
-      const result =
-        document.createElement("div");
-
-
-      const title =
-        document.createElement("div");
-
-      title.textContent =
-        getMeasureName(record);
-
-
-      result.appendChild(title);
-
-
-      const descriptionText =
-        getDescription(record);
-
-
-      if (descriptionText) {
-
-        const description =
-          document.createElement("div");
-
-        description.textContent =
-          descriptionText;
-
-        result.appendChild(description);
-      }
-
-
-      /*
-       * Clicking a result selects the corresponding
-       * row in Grist.
-       */
-      result.addEventListener("click", async () => {
-
-        try {
-
-          if (record.id !== undefined) {
-
-            await grist.setCursorPos({
-              rowId: record.id
-            });
-
-          }
-
-        } catch (error) {
-
-          console.error(
-            "Unable to select Grist row:",
-            error
-          );
-        }
-      });
-
-
-      /*
-       * Make the result look clickable without
-       * imposing a visual theme.
-       */
-      result.style.cursor = "pointer";
-
-
-      resultsContainer.appendChild(result);
 
     });
 
 
-    if (matches.length > 100) {
+    /*
+     * Get Grist row IDs.
+     */
+    const rowIds =
+      matchingRows
+        .map(record => record.id)
+        .filter(id =>
+          typeof id === "number"
+        );
 
-      const more =
-        document.createElement("div");
 
-      more.textContent =
-        "Showing first 100 results.";
-
-      resultsContainer.appendChild(more);
-    }
+    /*
+     * Tell Grist which rows should be selected
+     * in linked widgets.
+     */
+    await grist.setSelectedRows(rowIds);
   }
 
 
   /*
-   * Load the table selected in Grist.
+   * Receive the complete table from Grist.
    *
-   * IMPORTANT:
-   * We use fetchSelectedTable() instead of
-   * docApi.fetchTable().
+   * Important:
+   * use rows format explicitly.
    */
-  async function loadData() {
+  grist.onRecords(
+    function(data) {
 
-    const status =
-      document.getElementById("status");
+      records = Array.isArray(data)
+        ? data
+        : [];
 
-    try {
-
-      const data =
-        await grist.fetchSelectedTable();
-
-
-      if (Array.isArray(data)) {
-
-        records = data;
-
-      } else {
-
-        records =
-          convertColumnDataToRecords(data);
-      }
-
-
-      status.textContent =
-        records.length +
-        " measures available";
-
-
-      performSearch();
-
-    } catch (error) {
-
-      console.error(
-        "Error loading Grist data:",
-        error
-      );
-
-
-      status.textContent =
-        "Unable to load data from Grist.";
-
-
-      const results =
-        document.getElementById("results");
-
-      results.textContent =
-        "Please check the widget access level and selected table.";
+      /*
+       * Re-apply the current search when the
+       * underlying data changes.
+       */
+      applySearch();
+    },
+    {
+      format: "rows"
     }
-  }
+  );
 
 
   /*
-   * Convert column-oriented data to records,
-   * if necessary.
-   */
-  function convertColumnDataToRecords(data) {
-
-    if (!data || typeof data !== "object") {
-      return [];
-    }
-
-
-    const columns =
-      Object.keys(data);
-
-
-    if (!columns.length) {
-      return [];
-    }
-
-
-    const firstColumn =
-      data[columns[0]];
-
-
-    if (!Array.isArray(firstColumn)) {
-      return [];
-    }
-
-
-    const rowCount =
-      firstColumn.length;
-
-
-    const output = [];
-
-
-    for (let i = 0; i < rowCount; i++) {
-
-      const record = {};
-
-
-      columns.forEach(column => {
-
-        const values =
-          data[column];
-
-        record[column] =
-          Array.isArray(values)
-            ? values[i]
-            : values;
-      });
-
-
-      output.push(record);
-    }
-
-
-    return output;
-  }
-
-
-  /*
-   * Search input.
+   * Search while typing.
    */
   document
     .getElementById("search")
     .addEventListener(
       "input",
-      performSearch
+      applySearch
     );
 
 
   /*
-   * Extended search checkbox.
+   * Re-run the search when the checkbox changes.
    */
   document
     .getElementById("searchContent")
     .addEventListener(
       "change",
-      performSearch
+      applySearch
     );
 
-
-  /*
-   * Clear button.
-   */
-  document
-    .getElementById("clear")
-    .addEventListener(
-      "click",
-      () => {
-
-        document.getElementById("search").value = "";
-
-        performSearch();
-
-        document.getElementById("search").focus();
-      }
-    );
-
-
-  /*
-   * React to changes in the Grist table.
-   */
-  grist.onRecords(function(data) {
-
-    records =
-      Array.isArray(data)
-        ? data
-        : convertColumnDataToRecords(data);
-
-    performSearch();
-  });
-
-
-  /*
-   * Initial load.
-   */
-  loadData();
 
 </script>
 
