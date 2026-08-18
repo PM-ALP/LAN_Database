@@ -36,16 +36,21 @@
 <body>
   <input id="search" type="text" placeholder="Cerca una misura..." />
   <div id="results"></div>
-  <script>
+
+   <script>
     let allRows = [];
 
     function normalize(value) {
       return String(value ?? "").toLowerCase();
     }
 
-    function render(rows) {
+    function render(rows, showAll) {
       const results = document.getElementById("results");
       results.innerHTML = "";
+
+      if (!showAll) {
+        return;
+      }
 
       if (!rows.length) {
         results.textContent = "Nessun risultato.";
@@ -64,11 +69,12 @@
       const query = normalize(document.getElementById("search").value.trim());
 
       if (!query) {
-        render(allRows);
+        render([], false);
         return;
       }
 
-      render(allRows.filter(row => normalize(row.Measure).includes(query)));
+      const filtered = allRows.filter(row => normalize(row.Measure).includes(query));
+      render(filtered, true);
     }
 
     document.getElementById("search").addEventListener("input", applyFilter);
@@ -80,5 +86,6 @@
       applyFilter();
     });
   </script>
+
   </body>
 </html>
