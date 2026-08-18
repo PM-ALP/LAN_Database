@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: Arial, sans-serif;
+      color: inherit;
+    }
+
+    body {
+      padding: 8px;
+    }
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+      background: transparent;
+      color: inherit;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 6px 8px;
+      outline: none;
+    }
+
+    .row {
+      padding: 4px 0;
+    }
+  </style>
+</head>
+<body>
+  <input id="search" type="text" placeholder="Cerca una misura..." />
+  <div id="results"></div>
+  <script>
+    let allRows = [];
+
+    function normalize(value) {
+      return String(value ?? "").toLowerCase();
+    }
+
+    function render(rows) {
+      const results = document.getElementById("results");
+      results.innerHTML = "";
+
+      if (!rows.length) {
+        results.textContent = "Nessun risultato.";
+        return;
+      }
+
+      rows.forEach(row => {
+        const div = document.createElement("div");
+        div.className = "row";
+        div.textContent = row.Measure ?? "";
+        results.appendChild(div);
+      });
+    }
+
+    function applyFilter() {
+      const query = normalize(document.getElementById("search").value.trim());
+
+      if (!query) {
+        render(allRows);
+        return;
+      }
+
+      render(allRows.filter(row => normalize(row.Measure).includes(query)));
+    }
+
+    document.getElementById("search").addEventListener("input", applyFilter);
+
+    grist.ready({ access: "read table" });
+
+    grist.onRecords((records) => {
+      allRows = records || [];
+      applyFilter();
+    });
+  </script>
+  </body>
+</html>
