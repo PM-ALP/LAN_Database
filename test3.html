@@ -32,7 +32,6 @@
 </head>
 <body>
   <input id="search" type="text" placeholder="Cerca una misura..." />
-  <div id="results"></div>
    <script>
     let allRows = [];
 
@@ -40,40 +39,20 @@
       return String(value ?? "").toLowerCase();
     }
 
-    function render(rows, showAll) {
-      const results = document.getElementById("results");
-      results.innerHTML = "";
-      if (!showAll) {
-        return;
-      }
-      if (!rows.length) {
-        results.textContent = "Nessun risultato.";
-        return;
-      }
-      rows.forEach(row => {
-        const div = document.createElement("div");
-        div.className = "row";
-        div.textContent = row.Measure ?? "";
-        results.appendChild(div);
-      });
-    }
-
     function applyFilter() {
       const query = normalize(document.getElementById("search").value.trim());
 
       if (!query) {
-        // stato a riposo: il widget non mostra nulla...
-        render([], false);
-        // ...e non filtra la tabella collegata: le mostriamo tutte.
+        // ricerca vuota: non filtriamo la tabella collegata, le mostriamo tutte.
         grist.setSelectedRows(allRows.map(row => row.id));
         return;
       }
 
       const filtered = allRows.filter(row => normalize(row.Measure).includes(query));
-      render(filtered, true);
 
-      // Qui è il punto chiave: diciamo a Grist "queste sono le righe da
-      // mostrare nel widget collegato tramite Select By".
+      // Diciamo a Grist "queste sono le righe da mostrare nel widget
+      // collegato tramite Select By". Il widget stesso non mostra più
+      // nessun elenco: il filtro si vede solo nella tabella collegata.
       grist.setSelectedRows(filtered.map(row => row.id));
     }
 
