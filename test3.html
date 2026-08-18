@@ -32,6 +32,9 @@
 </head>
 <body>
   <input id="search" type="text" placeholder="Cerca una misura..." />
+  <label style="display:block; font-size:12px; margin-top:4px;">
+  <input type="checkbox" id="deepSearch"> Cerca anche nel contenuto della misura
+</label>
    <script>
     let allRows = [];
 
@@ -48,7 +51,21 @@
         return;
       }
 
-      const filtered = allRows.filter(row => normalize(row.Measure).includes(query));
+       const deep = document.getElementById("deepSearch").checked;
+  
+        function fullText(row) {
+          const lists = ["Approach", "Effect", "Activity"]
+            .map(col => Array.isArray(row[col]) ? row[col].filter(v => v !== "L").join(" ") : "");
+          return [
+            row.Measure, row.Short_description, row.Potential_limits,
+            row.Climate_change, row.Examples, ...lists
+          ].join(" ");
+        }
+        
+        const filtered = allRows.filter(row =>
+          normalize(row.Measure).includes(query) ||
+          (deep && normalize(fullText(row)).includes(query))
+        );
 
       // Diciamo a Grist "queste sono le righe da mostrare nel widget
       // collegato tramite Select By". Il widget stesso non mostra più
@@ -57,6 +74,7 @@
     }
 
     document.getElementById("search").addEventListener("input", applyFilter);
+    document.getElementById("deepSearch").addEventListener("change", applyFilter);
 
     // allowSelectBy: true -> rende questo widget selezionabile come
     // "Select By" da altri widget della pagina (es. la tua tabella Overview).
