@@ -11,11 +11,9 @@
       font-family: Arial, sans-serif;
       color: inherit;
     }
-
     body {
       padding: 8px;
     }
-
     input {
       width: 100%;
       box-sizing: border-box;
@@ -27,7 +25,6 @@
       padding: 6px 8px;
       outline: none;
     }
-
     .row {
       padding: 4px 0;
     }
@@ -36,7 +33,6 @@
 <body>
   <input id="search" type="text" placeholder="Cerca una misura..." />
   <div id="results"></div>
-
    <script>
     let allRows = [];
 
@@ -47,16 +43,13 @@
     function render(rows, showAll) {
       const results = document.getElementById("results");
       results.innerHTML = "";
-
       if (!showAll) {
         return;
       }
-
       if (!rows.length) {
         results.textContent = "Nessun risultato.";
         return;
       }
-
       rows.forEach(row => {
         const div = document.createElement("div");
         div.className = "row";
@@ -69,23 +62,31 @@
       const query = normalize(document.getElementById("search").value.trim());
 
       if (!query) {
+        // stato a riposo: il widget non mostra nulla...
         render([], false);
+        // ...e non filtra la tabella collegata: le mostriamo tutte.
+        grist.setSelectedRows(allRows.map(row => row.id));
         return;
       }
 
       const filtered = allRows.filter(row => normalize(row.Measure).includes(query));
       render(filtered, true);
+
+      // Qui è il punto chiave: diciamo a Grist "queste sono le righe da
+      // mostrare nel widget collegato tramite Select By".
+      grist.setSelectedRows(filtered.map(row => row.id));
     }
 
     document.getElementById("search").addEventListener("input", applyFilter);
 
-    grist.ready({ access: "read table" });
+    // allowSelectBy: true -> rende questo widget selezionabile come
+    // "Select By" da altri widget della pagina (es. la tua tabella Overview).
+    grist.ready({ requiredAccess: "read table", allowSelectBy: true });
 
     grist.onRecords((records) => {
       allRows = records || [];
       applyFilter();
     });
   </script>
-
   </body>
 </html>
