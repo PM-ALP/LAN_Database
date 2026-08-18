@@ -27,30 +27,63 @@
       padding: 6px 8px;
       outline: none;
     }
+
+    .row {
+      padding: 4px 0;
+    }
   </style>
 </head>
 <body>
   <input id="search" type="text" placeholder="Cerca una misura..." />
+  <div id="results"></div>
 
   <script>
+    let allRows = [];
+
     function normalize(value) {
       return String(value ?? "").toLowerCase();
+    }
+
+    function render(rows) {
+      const results = document.getElementById("results");
+      results.innerHTML = "";
+
+      if (!rows.length) {
+        results.textContent = "Nessun risultato.";
+        return;
+      }
+
+      rows.forEach(row => {
+        const div = document.createElement("div");
+        div.className = "row";
+        div.textContent = row.Measure ?? "";
+        results.appendChild(div);
+      });
     }
 
     function applyFilter() {
       const query = normalize(document.getElementById("search").value.trim());
 
-      grist.setOptions({
-        filters: query ? [{
-          column_id: "Measure",
-          filter: JSON.stringify({ contains: query })
-        }] : []
-      });
+      if (!query) {
+        render(allRows);
+        return;
+      }
+
+      const filtered = allRows.filter(row =>
+        normalize(row.Measure).includes(query)
+      );
+
+      render(filtered);
     }
 
     document.getElementById("search").addEventListener("input", applyFilter);
 
-    grist.ready({ access: "none" });
+    grist.ready({ access: "read table" });
+
+    grist.onRecords((records) => {
+      allRows = records || [];
+      applyFilter();
+    });
   </script>
 
   </body>
