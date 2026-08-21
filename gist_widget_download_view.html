@@ -38,30 +38,28 @@
       document.getElementById("downloadBtn").disabled = !record;
     });
 
-    document.getElementById("downloadBtn").addEventListener("click", () => {
-      if (!currentRecord) return;
-      const r = currentRecord;
-
-      const rows = [
-        ["Measure name", r.Measure || ""],
-        ["Approach", decodeList(r.Approach).join(", ")],
-        ["Effect", decodeList(r.Effect).join(", ")],
-        ["Activity", decodeList(r.Activity).join(", ")],
-        ["General description", r.Description || ""],
-        ["Possible issues", r.Limits || ""],
-        ["Climate change", r.Climate || ""],
-        ["Examples", r.Examples || ""],
-      ];
-
-      const worksheet = XLSX.utils.aoa_to_sheet(rows);
-      worksheet["!cols"] = [{ wch: 20 }, { wch: 70 }];
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
-
-      const safeName = (r.Measure || "measure").replace(/[\\/:*?"<>|]/g, "_");
-      XLSX.writeFile(workbook, "LAN_measures_" + safeName + ".xlsx");
-    });
+   document.getElementById("downloadBtn").addEventListener("click", () => {
+    if (!currentRecord) return;
+    const r = currentRecord;
+    const rows = [
+      ["Measure name", r.Measure || ""],
+      ["Approach", decodeList(r.Approach).join(", ")],
+      ["Effect", decodeList(r.Effect).join(", ")],
+      ["Activity", decodeList(r.Activity).join(", ")],
+      ["General description", r.Description || ""],
+      ["Possible issues", r.Limits || ""],
+      ["Climate change", r.Climate || ""],
+      ["Examples", r.Examples || ""],
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    worksheet["!cols"] = [{ wch: 20 }, { wch: 70 }];
+    const workbook = XLSX.utils.book_new();
+  
+    const safeName = (r.Measure || "measure").replace(/[\\/:*?"<>|]/g, "_");
+  
+    XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
+    XLSX.writeFile(workbook, "LAN_measures_" + safeName + ".xlsx");
+  });
   </script>
 </body>
 </html>
