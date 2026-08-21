@@ -55,7 +55,7 @@
     worksheet["!cols"] = [{ wch: 20 }, { wch: 70 }];
     const workbook = XLSX.utils.book_new();
   
-    const safeName = (r.Measure || "measure").replace(/[\\/:*?"<>|]/g, "_");
+    const safeName = (r.Measure || "measure").replace(/[\\/:*?"<>| ]/g, "_");
   
     XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
     XLSX.writeFile(workbook, "LAN_measures_" + safeName + ".xlsx");
