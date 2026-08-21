@@ -11,7 +11,7 @@
       padding: 8px 14px;
       font-size: 13px;
       border: 1px solid #0C5C5F;
-      background: inherit;
+      background: #0C5C5F;
       color: #fff;
       border-radius: 6px;
       cursor: pointer;
@@ -20,10 +20,10 @@
   </style>
 </head>
 <body>
-  <button id="downloadBtn" disabled>current measure (.xlsx)</button>
+  <button id="downloadBtn" disabled>Download this measure (Excel)</button>
 
   <script>
-    let currentRecords = [];
+    let currentRecord = null;
 
     grist.ready({ requiredAccess: "read table" });
 
@@ -33,37 +33,34 @@
       return [];
     }
 
-    grist.onRecords((records) => {
-      currentRecords = records || [];
-      document.getElementById("downloadBtn").disabled = currentRecords.length === 0;
+    grist.onRecord((record) => {
+      currentRecord = record;
+      document.getElementById("downloadBtn").disabled = !record;
     });
 
     document.getElementById("downloadBtn").addEventListener("click", () => {
-      if (!currentRecords.length) return;
+      if (!currentRecord) return;
+      const r = currentRecord;
 
-      // Build one vertical Field/Value block per measure, stacked with a
-      // blank row between them -- same layout as the single-measure
-      // download, just repeated for every measure currently in view.
-      const rows = [];
-      currentRecords.forEach((r, i) => {
-        if (i > 0) rows.push([]); // blank separator row between measures
-
-        rows.push(["Measure name", r.Measure || ""]);
-        rows.push(["Approach", decodeList(r.Approach).join(", ")]);
-        rows.push(["Effect", decodeList(r.Effect).join(", ")]);
-        rows.push(["Activity", decodeList(r.Activity).join(", ")]);
-        rows.push(["General description", r.Description || ""]);
-        rows.push(["Possible issues", r.Limits || ""]);
-        rows.push(["Climate change", r.Climate || ""]);
-        rows.push(["Examples", r.Examples || ""]);
-      });
+      const rows = [
+        ["Measure name", r.Measure || ""],
+        ["Approach", decodeList(r.Approach).join(", ")],
+        ["Effect", decodeList(r.Effect).join(", ")],
+        ["Activity", decodeList(r.Activity).join(", ")],
+        ["General description", r.Description || ""],
+        ["Possible issues", r.Limits || ""],
+        ["Climate change", r.Climate || ""],
+        ["Examples", r.Examples || ""],
+      ];
 
       const worksheet = XLSX.utils.aoa_to_sheet(rows);
-      worksheet["!cols"] = [{ wch: 20 }, { wch: 80 }];
+      worksheet["!cols"] = [{ wch: 20 }, { wch: 70 }];
 
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Measures");
-      XLSX.writeFile(workbook, "measures_current_view.xlsx");
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Measure");
+
+      const safeName = (r.Measure || "measure").replace(/[\\/:*?"<>|]/g, "_");
+      XLSX.writeFile(workbook, safeName + ".xlsx");
     });
   </script>
 </body>
