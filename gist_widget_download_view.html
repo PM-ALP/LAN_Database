@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    body { padding: 8px; }
+    button {
+      padding: 8px 14px;
+      font-size: 13px;
+      border: 1px solid #0C5C5F;
+      background: inherit;
+      color: #fff;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:disabled { background: #ccc; border-color: #ccc; cursor: default; }
+  </style>
+</head>
+<body>
+  <button id="downloadBtn" disabled>current measure (.xlsx)</button>
+
+  <script>
+    let currentRecords = [];
+
+    grist.ready({ requiredAccess: "read table" });
+
+    function decodeList(value) {
+      if (Array.isArray(value) && value[0] === "L") return value.slice(1);
+      if (Array.isArray(value)) return value;
+      return [];
+    }
+
+    grist.onRecords((records) => {
+      currentRecords = records || [];
+      document.getElementById("downloadBtn").disabled = currentRecords.length === 0;
+    });
+
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      if (!currentRecords.length) return;
+
+      // Build one vertical Field/Value block per measure, stacked with a
+      // blank row between them -- same layout as the single-measure
+      // download, just repeated for every measure currently in view.
+      const rows = [];
+      currentRecords.forEach((r, i) => {
+        if (i > 0) rows.push([]); // blank separator row between measures
+
+        rows.push(["Measure name", r.Measure || ""]);
+        rows.push(["Approach", decodeList(r.Approach).join(", ")]);
+        rows.push(["Effect", decodeList(r.Effect).join(", ")]);
+        rows.push(["Activity", decodeList(r.Activity).join(", ")]);
+        rows.push(["General description", r.Description || ""]);
+        rows.push(["Possible issues", r.Limits || ""]);
+        rows.push(["Climate change", r.Climate || ""]);
+        rows.push(["Examples", r.Examples || ""]);
+      });
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      worksheet["!cols"] = [{ wch: 20 }, { wch: 80 }];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Measures");
+      XLSX.writeFile(workbook, "measures_current_view.xlsx");
+    });
+  </script>
+</body>
+</html>
