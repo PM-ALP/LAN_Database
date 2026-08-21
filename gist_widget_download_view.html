@@ -43,9 +43,9 @@
     const r = currentRecord;
     const rows = [
       ["Measure name", r.Measure || ""],
-      ["Approach", decodeList(r.Approach).join(", ")],
-      ["Effect", decodeList(r.Effect).join(", ")],
-      ["Activity", decodeList(r.Activity).join(", ")],
+      ["Approach", decodeList(r.Approach).join("; ")],
+      ["Effect", decodeList(r.Effect).join("; ")],
+      ["Activity", decodeList(r.Activity).join("; ")],
       ["General description", r.Description || ""],
       ["Possible issues", r.Limits || ""],
       ["Climate change", r.Climate || ""],
